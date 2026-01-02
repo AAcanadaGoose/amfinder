@@ -29,6 +29,29 @@ Detailed installation instructions for Linux, Mac and Windows can be found [here
 If you are not familiar with Python virtual environments, you may want
 to read [this page](https://docs.python.org/3/tutorial/venv.html) first.
 
+### Quick virtual environment setup
+```bash
+# Create venv (Python 3.11 recommended)
+python3.11 -m venv .venv311
+
+# Activate
+# macOS/Linux (bash/zsh)
+source .venv311/bin/activate
+# Windows (PowerShell)
+# .\.venv311\Scripts\Activate.ps1
+# Windows (cmd)
+# .\.venv311\Scripts\activate
+
+# Verify you are using the venv interpreter
+which python   # macOS/Linux -> .../amfinder-master/.venv311/bin/python
+python -V      # should show Python 3.11.x
+
+# Install project requirements
+python -m pip install -U pip setuptools wheel
+python -m pip install -r amf/requirements.txt
+```
+Re-activate the venv in any new terminal with the same `source`/`Activate.ps1` command. Leave it with `deactivate`.
+
 
 ## Python API (programmatic use)<a name="python-api"></a>
 

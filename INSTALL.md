@@ -9,13 +9,34 @@ Use AMFinder programmatically from Python.
 1) Create and activate a virtual environment
 ```bash
 python3.11 -m venv .venv311
+# macOS/Linux (bash/zsh)
 source .venv311/bin/activate
-python -m pip install -U pip setuptools wheel
+# Windows (PowerShell)
+# .\.venv311\Scripts\Activate.ps1
+# Windows (cmd)
+# .\.venv311\Scripts\activate
+```
+Verify you’re using the venv’s interpreter:
+```bash
+which python   # macOS/Linux -> .../amfinder-master/.venv311/bin/python
+python -V      # should show Python 3.11.x
+```
+If you open a new terminal later, re‑activate with the same command above. Leave the venv with:
+```bash
+deactivate
 ```
 
-2) Install dependencies
+2) Install dependencies (inside the activated venv)
 ```bash
+python -m pip install -U pip setuptools wheel
 python -m pip install -r amf/requirements.txt
+```
+Why activation matters
+- requirements.txt uses environment markers (e.g., installs `tensorflow-macos` on macOS). Installing inside the activated venv ensures the correct packages are resolved for your OS and bound to that interpreter.
+- You can confirm TensorFlow selection after install:
+```bash
+python -c "import sys; print(sys.executable)"
+python -c "import tensorflow as tf; print('TF:', tf.__version__)"
 ```
 Notes
 - On macOS, this installs `tensorflow-macos` and uses Metal via `tensorflow-metal`.
