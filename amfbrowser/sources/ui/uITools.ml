@@ -25,7 +25,6 @@
 module type PARAMS = sig
     val packing : GObj.widget -> unit
     val border_width : int
-    val tooltips : GData.tooltips
 end
 
 

@@ -33,9 +33,6 @@ module type S = sig
   val cairo : unit -> Cairo.context
   (** Cairo context used to overlay annotation information. *)
 
-  val pixmap : unit -> GDraw.pixmap
-  (** Backing pixmap used to draw offscreen. *)
-
   val width : unit -> int
   (** Width of the drawing area, in pixels. *)
 
@@ -43,7 +40,10 @@ module type S = sig
   (** Height of the drawing area, in pixels. *)
 
   val synchronize : unit -> unit
-  (** Synchronizes the backing [pixmap] with the foreground [area]. *)
+  (** Queue redraw of the drawing area. *)
+
+  val snapshot : unit -> GdkPixbuf.pixbuf
+  (** Returns a pixbuf of the current drawing surface. *)
 end
 
 module Make : PARAMS -> S

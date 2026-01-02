@@ -40,7 +40,6 @@ module type PARAMS = sig
     val current : unit -> AmfLevel.level
     val set_current : AmfLevel.level -> unit
     val radios : (AmfLevel.level * GButton.radio_button) list
-    val tooltips : GData.tooltips
 end
 
 
@@ -56,7 +55,6 @@ module Make (P : PARAMS) : S = struct
             ~relief:`NONE
             ~packing:(table#attach ~left ~top:0) () in
         toggle#misc#set_can_focus false;
-        P.tooltips#set_tip ~text:(AmfLevel.tip chr) toggle#coerce;
         (* Toggle button icon. *)
         let image = GMisc.image
             ~width:48

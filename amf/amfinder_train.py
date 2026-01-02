@@ -55,7 +55,7 @@ import io
 import os
 #import cv2
 import yaml
-import keras
+from tensorflow import keras
 import psutil
 import random
 random.seed(42)
@@ -65,13 +65,12 @@ import functools
 import amfinder_zipfile as zf
 import numpy as np
 import pandas as pd
-#from PIL import Image # debug
+from PIL import Image
 
 from contextlib import redirect_stdout
 
-from keras.callbacks import EarlyStopping
-from keras.callbacks import ReduceLROnPlateau
-from keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
@@ -98,6 +97,168 @@ def get_zipfile(path):
 
     return '{}.zip'.format(os.path.splitext(path)[0])
 
+
+# --- New modular training helpers for API use ---
+
+def load_annotations_flexible(annotation_input, level=1):
+    """
+    Load annotations from flexible input.
+
+    Args:
+        annotation_input: DataFrame, ZIP path, or TSV path
+        level (int): 1 or 2
+
+    Returns:
+        pd.DataFrame: Annotations with columns ['row','col', classes...]
+    """
+    if isinstance(annotation_input, pd.DataFrame):
+        return annotation_input
+    if isinstance(annotation_input, str):
+        path = annotation_input
+        # ZIP file
+        if path.lower().endswith('.zip') and zf.is_zipfile(path):
+            with zf.ZipFile(path, 'r') as z:
+                base = 'col' if level == 1 else 'myc'
+                table = f'{base}.tsv'
+                if table not in z.namelist():
+                    return None
+                raw = z.read(table).decode('utf-8')
+                return pd.read_csv(io.StringIO(raw), sep='\t')
+        # TSV file
+        if path.lower().endswith('.tsv') and os.path.isfile(path):
+            return pd.read_csv(path, sep='\t')
+    return None
+
+
+def load_tiles_from_annotations(image_inputs, annotation_inputs, level=1, tile_size=126):
+    """
+    Load and extract tiles from images with annotations.
+
+    Args:
+        image_inputs (list): List of image inputs (flexible format)
+        annotation_inputs (list): List of DataFrames or ZIP/TSV file paths
+        level (int): 1 or 2
+
+    Returns:
+        tuple: (X_array, y_array) - tiles and labels
+    """
+    if image_inputs is None or annotation_inputs is None:
+        return None, None
+    if len(image_inputs) != len(annotation_inputs):
+        raise ValueError('images and annotations lists must have same length')
+    X_tiles = []
+    y_labels = []
+    headers = [['Y','N','X'], ['A','V','H','I']][level-1]
+    for img_in, ann_in in zip(image_inputs, annotation_inputs):
+        vimg, npimg = AmfSegm.load_image(img_in)
+        ann = load_annotations_flexible(ann_in, level=level)
+        if ann is None:
+            continue
+        for row in ann.itertuples(index=False):
+            r = int(getattr(row, 'row'))
+            c = int(getattr(row, 'col'))
+            tile = AmfSegm.tile_from_array(npimg, r, c, edge=tile_size)
+            X_tiles.append(tile)
+            y_vec = [int(getattr(row, h)) for h in headers]
+            y_labels.append(y_vec)
+    if len(X_tiles) == 0:
+        return np.empty((0, tile_size, tile_size, 3), dtype=np.uint8), np.empty((0, len(headers)), dtype=np.uint8)
+    return np.array(X_tiles, dtype=np.uint8), np.array(y_labels, dtype=np.uint8)
+
+
+def train_from_arrays(X_train, y_train, X_val=None, y_val=None,
+                     level=1, epochs=100, batch_size=32,
+                     learning_rate=0.001, patience=12,
+                     data_augmentation=False, **kwargs):
+    """
+    Train model from numpy arrays.
+
+    Args:
+        X_train (np.ndarray): Training tiles (N, 126, 126, 3)
+        y_train (np.ndarray): Training labels (N, n_classes)
+        X_val (np.ndarray, optional): Validation tiles
+        y_val (np.ndarray, optional): Validation labels
+        level (int): 1 for CNN1, 2 for CNN2
+        epochs (int): Number of epochs
+        batch_size (int): Batch size
+        learning_rate (float): Learning rate
+        patience (int): Early stopping patience
+        data_augmentation (bool): Use data augmentation
+
+    Returns:
+        tuple: (model, history_dict)
+    """
+    # Configure global settings to reuse convenience utilities
+    AmfConfig.set('level', level)
+    AmfConfig.set('learning_rate', learning_rate)
+    AmfConfig.set('patience', patience)
+    AmfConfig.set('batch_size', batch_size)
+
+    # Build model
+    if level == 1:
+        model = AmfModel.create_cnn1()
+    else:
+        model = AmfModel.create_cnn2()
+
+    # Prepare generators
+    if level == 1:
+        if data_augmentation:
+            t_gen = ImageDataGenerator(rescale=1.0/255,
+                                       horizontal_flip=True,
+                                       vertical_flip=True,
+                                       brightness_range=[0.75, 1.25])
+        else:
+            t_gen = ImageDataGenerator(rescale=1.0/255)
+        v_gen = ImageDataGenerator(rescale=1.0/255)
+        yt = y_train
+        yc = y_val if y_val is not None else None
+    else:
+        if data_augmentation:
+            t_gen = ImageDataGeneratorMO(rescale=1.0/255,
+                                         horizontal_flip=True,
+                                         vertical_flip=True,
+                                         brightness_range=[0.75, 1.25])
+        else:
+            t_gen = ImageDataGeneratorMO(rescale=1.0/255)
+        v_gen = ImageDataGeneratorMO(rescale=1.0/255)
+        # Split into list of class vectors per ImageDataGeneratorMO requirements
+        yt = [np.array([x[i] for x in y_train]) for i in range(y_train.shape[1])]
+        yc = None
+        if y_val is not None:
+            yc = [np.array([x[i] for x in y_val]) for i in range(y_val.shape[1])]
+
+    # Train/validation split if not provided
+    if X_val is None or (level == 1 and yc is None) or (level == 2 and yc is None):
+        X_tr, X_va, y_tr, y_va = train_test_split(X_train, y_train,
+                                                  shuffle=True,
+                                                  test_size=AmfConfig.get('vfrac') / 100.0,
+                                                  random_state=42)
+        if level == 2:
+            y_tr = [np.array([x[i] for x in y_tr]) for i in range(y_tr.shape[1])]
+            y_va = [np.array([x[i] for x in y_va]) for i in range(y_va.shape[1])]
+        yt, yc = y_tr, y_va
+        xt, xc = X_tr, X_va
+    else:
+        xt, xc = X_train, X_val
+
+    # Determine class weights
+    weights = class_weights(yt if level == 1 else np.array(y_train)) if level == 1 else \
+              {h: None for h in AmfConfig.get('header')}  # Keras multi-output weights would be dict; skipping here
+
+    callbacks = get_callbacks()
+
+    history = model.fit(t_gen.flow(xt, yt, batch_size=batch_size),
+                        steps_per_epoch=max(1, len(xt) // batch_size),
+                        class_weight=weights if level == 1 else None,
+                        epochs=epochs,
+                        validation_data=v_gen.flow(xc, yc, batch_size=batch_size),
+                        validation_steps=max(1, len(xc) // batch_size),
+                        callbacks=callbacks,
+                        verbose=2)
+
+    return model, history.history
+
+# --- End modular training helpers ---
 
 
 def import_settings(path):

@@ -28,7 +28,6 @@ module type PARAMS = sig
   val parent : GWindow.window
   val packing : #GButton.tool_item_o -> unit
   val border_width : int
-  val tooltips : GData.tooltips
 end
 
 module type S = sig

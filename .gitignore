@@ -1,0 +1,32 @@
+# Python virtual environments
+.venv/
+.venv*/
+venv/
+env/
+
+# Python cache and artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.dist/
+dist/
+build/
+.coverage
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Generated predictions and archives
+Sample_photos/**/*.zip
+Sample_photos/**/predictions/
+
+# amfbrowser build outputs
+amfbrowser/sources/_build/

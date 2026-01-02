@@ -36,14 +36,10 @@ let window =
     in wnd#connect#destroy GMain.quit;
     wnd
 
-let status_icon = GMisc.status_icon_from_pixbuf
-    ~visible:true
-    (AmfRes.get `AMFBROWSER 24)
-
 let spacing = 5
 let border_width = spacing
 
-let tooltips = GData.tooltips ()
+(* tooltips removed in GTK3 port *)
 
 
 module Box = struct
@@ -122,8 +118,7 @@ module Params = struct
         include Levels
         let packing x = left_pane#attach ~top:0 ~left:0 ~expand:`X ~fill:`NONE x
         let remove = left_pane#remove
-        let tooltips = tooltips
-    end
+     end
     module Magnifier = struct
         let rows = 3
         let columns = 3
@@ -138,8 +133,7 @@ module Params = struct
         let parent = window
         let border_width = border_width
         let packing obj = toolbar#insert obj
-        let tooltips = tooltips
-    end
+     end
     module Layers = struct
         include Levels
         let packing obj = container#attach
@@ -148,11 +142,10 @@ module Params = struct
         let remove = container#remove
     end
     module Tools = struct
-        let tooltips = tooltips
-        let border_width = border_width
-        let packing obj = container#attach
-            ~left:0 ~top:2
-            ~expand:`NONE ~fill:`Y obj
+         let border_width = border_width
+         let packing obj = container#attach
+             ~left:0 ~top:2
+             ~expand:`NONE ~fill:`Y obj
     end
     module FileChooser = struct
         let parent = window

@@ -62,6 +62,97 @@ def table_header():
     return ['row', 'col'] + AmfConfig.get('header')
 
 
+# --- New modular helpers for API use ---
+
+def predict_from_tiles_cnn1(model, tiles, batch_size=32):
+    """
+    Predict colonization from tile array.
+
+    Args:
+        model (keras.Model): CNN1 model
+        tiles (np.ndarray): Preprocessed or raw tiles (N, 126, 126, 3)
+        batch_size (int): Batch size
+
+    Returns:
+        np.ndarray: Predictions (N, 3)
+    """
+    if tiles.dtype != np.float32:
+        tiles = tiles.astype(np.float32) / 255.0
+    preds = model.predict(tiles, batch_size=batch_size, verbose=0)
+    return np.array(preds)
+
+
+def predict_from_tiles_cnn2(model, tiles, batch_size=32):
+    """
+    Predict structures from tile array.
+
+    Args:
+        model (keras.Model): CNN2 model
+        tiles (np.ndarray): Preprocessed or raw tiles (N, 126, 126, 3)
+        batch_size (int): Batch size
+
+    Returns:
+        np.ndarray: Predictions (N, 4)
+    """
+    if tiles.dtype != np.float32:
+        tiles = tiles.astype(np.float32) / 255.0
+    prd = model.predict(tiles, batch_size=batch_size, verbose=0)
+    # Model returns a list of 4 arrays shaped (N,1); stack to (N,4)
+    if isinstance(prd, (list, tuple)):
+        prd = np.concatenate([x.reshape(-1, 1) for x in prd], axis=1)
+    return np.array(prd)
+
+
+def format_predictions(predictions, nrows, ncols, level=1):
+    """
+    Format prediction array as DataFrame with coordinates.
+
+    Args:
+        predictions (np.ndarray): Prediction probabilities
+        nrows (int): Number of tile rows
+        ncols (int): Number of tile columns
+        level (int): 1 or 2
+
+    Returns:
+        pd.DataFrame: Formatted predictions
+    """
+    total = nrows * ncols
+    if predictions.shape[0] != total:
+        raise ValueError('Prediction count does not match grid dimensions')
+    col_values = list(range(ncols)) * nrows
+    row_values = [x // ncols for x in range(total)]
+    header = ['Y','N','X'] if level == 1 else ['A','V','H','I']
+    df = pd.DataFrame(predictions, columns=header)
+    df.insert(0, 'col', col_values)
+    df.insert(0, 'row', row_values)
+    return df
+
+
+def predict_from_array(model, image_array, tile_size=126, batch_size=32, level=1):
+    """
+    End-to-end prediction from image array.
+
+    Args:
+        model (keras.Model): Trained model
+        image_array (np.ndarray): Image (H, W, C)
+        tile_size (int): Tile size
+        batch_size (int): Batch size
+        level (int): 1 or 2
+
+    Returns:
+        pd.DataFrame: Predictions with row/col coordinates
+    """
+    tiles, nrows, ncols = AmfSegm.array_to_tiles(image_array, tile_size)
+    if tiles.size == 0:
+        return pd.DataFrame(columns=['row', 'col'] + AmfConfig.get('header'))
+    if level == 1:
+        preds = predict_from_tiles_cnn1(model, tiles, batch_size=batch_size)
+    else:
+        preds = predict_from_tiles_cnn2(model, tiles, batch_size=batch_size)
+    return format_predictions(preds, nrows, ncols, level=level)
+
+# --- End modular helpers ---
+
 
 def process_row_1(cnn1, image, nrows, ncols, batch_size, r, sr_image):
     """

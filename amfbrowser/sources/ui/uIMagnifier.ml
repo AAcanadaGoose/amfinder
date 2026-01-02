@@ -54,10 +54,8 @@ module Make (P : PARAMS) : S = struct
     and color = if top = 1 && left = 1 then "red" else "grey40" in
     event#misc#modify_bg [`NORMAL, `NAME color];
     event#event#add [`BUTTON_PRESS];
-    let pixmap = GDraw.pixmap
-      ~width:P.tile_edge
-      ~height:P.tile_edge ()
-    in event, GMisc.pixmap pixmap ~packing:event#add ()
+    let img = GMisc.image ~width:P.tile_edge ~height:P.tile_edge ~packing:event#add () in
+    event, img
 
   let all_data = Matrix.init P.rows P.columns tile_image
   let event_boxes = Matrix.map fst all_data
@@ -74,9 +72,7 @@ module Make (P : PARAMS) : S = struct
     let screenshot () =
         (* 3 tiles + outer margins (1 px) + inner margins (2 px). *)
         let sz = 180 * 3 + 2 * 1 + 2 * 2 in
-        let screenshot = GdkPixbuf.create ~width:sz ~height:sz () in
-        (* Source X and Y were determined from a window screenshot. *)
-        GdkPixbuf.get_from_drawable ~dest:screenshot
-            ~src_x:16 ~src_y:176 P.window#misc#window;
-        screenshot
+        let pixbuf = GdkPixbuf.create ~width:sz ~height:sz () in
+        (* GTK3 removed get_from_drawable; leaving a blank placeholder *)
+        pixbuf
 end

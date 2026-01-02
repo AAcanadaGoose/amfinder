@@ -174,11 +174,9 @@ module Toolbox = struct
         let snap (img : AmfImage.image) =
             (* Size of the overview window. *)
             let width, height = AmfUI.Drawing.(width (), height ()) in
-            let dest = GdkPixbuf.create ~width ~height () in
-            (* Retrieve current drawing *)
+            (* Retrieve current drawing as pixbuf *)
             img#cursor#hide ();
-            let pixmap = AmfUI.Drawing.pixmap () in
-            GdkPixbuf.get_from_drawable ~dest pixmap#pixmap;
+            let dest = AmfUI.Drawing.snapshot () in
             img#cursor#show ();
             (* Generate filename *)
             let r = fst img#brush#r_range and c = fst img#brush#c_range in

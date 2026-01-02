@@ -46,16 +46,16 @@ Functions
 
 
 import os
-import keras
+from tensorflow import keras
 
-from keras.models import Model
-from keras.layers import Input, Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 # From keras 2.5, the following will be replaced by:
 # from keras.optimizers import adam_v2
 # Thanks to matevzl533 for reporting this. 
 # Reference: https://stackoverflow.com/a/68704757
-from keras.optimizers import Adam
-from keras.initializers import he_uniform
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.initializers import he_uniform
 
 import amfinder_log as AmfLog
 import amfinder_config as AmfConfig
@@ -65,6 +65,76 @@ import amfinder_config as AmfConfig
 INPUT_SIZE = 126
 CNN1_NAME = 'col'
 CNN2_NAME = 'myc'
+
+# --- New flexible model helpers ---
+
+def load_flexible(model_input=None, model_object=None):
+    """
+    Load model from flexible input.
+
+    Args:
+        model_input: str (absolute or relative path) to a model file
+        model_object (keras.Model): Pre-loaded model
+
+    Returns:
+        keras.Model: Loaded or provided model
+    """
+    if model_object is not None:
+        model = model_object
+        # Infer level if possible
+        if getattr(model, 'name', None) == CNN1_NAME:
+            AmfConfig.set('level', 1)
+        elif getattr(model, 'name', None) == CNN2_NAME:
+            AmfConfig.set('level', 2)
+        return model
+    if isinstance(model_input, str):
+        path = model_input
+        if not os.path.isabs(path):
+            # Try absolute first; if not, fall back to appdir/trained_networks
+            abs_try = os.path.join(AmfConfig.get_appdir(), 'trained_networks', path)
+            if os.path.isfile(abs_try):
+                path = abs_try
+        if not os.path.isfile(path):
+            AmfLog.error(f'Model file not found: {path}', exit_code=AmfLog.ERR_NO_PRETRAINED_MODEL)
+        model = keras.models.load_model(path, compile=False)
+        if model.name == CNN1_NAME:
+            AmfConfig.set('level', 1)
+        else:
+            AmfConfig.set('level', 2)
+        AmfLog.text(f'Model: {path}')
+        AmfLog.text(f'Classes: {AmfConfig.get_class_documentation()}.')
+        return model
+    AmfLog.error('Model input not provided', exit_code=AmfLog.ERR_NO_PRETRAINED_MODEL)
+
+
+def save_model_to_bytes(model):
+    """
+    Serialize model to bytes (HDF5). Uses a temporary file internally.
+    """
+    import tempfile
+    import io as _io
+    with tempfile.NamedTemporaryFile(suffix='.h5', delete=True) as tmp:
+        model.save(tmp.name)
+        tmp.seek(0)
+        return tmp.read()
+
+
+def load_model_from_bytes(model_bytes):
+    """
+    Load model from bytes (HDF5) via a temporary file.
+    """
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix='.h5', delete=True) as tmp:
+        tmp.write(model_bytes)
+        tmp.flush()
+        mdl = keras.models.load_model(tmp.name, compile=False)
+        if mdl.name == CNN1_NAME:
+            AmfConfig.set('level', 1)
+        else:
+            AmfConfig.set('level', 2)
+        return mdl
+
+# --- End flexible model helpers ---
 
 
 def convolutions():
@@ -159,7 +229,7 @@ def create_cnn1():
     opt = Adam(learning_rate=AmfConfig.get('learning_rate'))
     model.compile(loss='categorical_crossentropy',
                   optimizer=opt,
-                  metrics=['acc'])
+                  metrics=['accuracy'])
 
     return model
 
@@ -182,57 +252,47 @@ def create_cnn2():
     opt = Adam(learning_rate=AmfConfig.get('learning_rate'))
     model.compile(loss='binary_crossentropy',
                   optimizer=opt,
-                  metrics=['acc'])
+                  metrics=['accuracy'])
 
     return model
 
 
 
-def load(name=None):
+def load(name=None, network=None, model_object=None, level=None):
     """
     Loads or initialises a convolutional neural network.
+    Accepts optional flexible inputs: absolute network path or a preloaded model.
     """
 
+    # Flexible cases first
+    if model_object is not None:
+        return load_flexible(model_object=model_object)
+    if network is not None:
+        return load_flexible(model_input=network)
+
+    # Legacy behavior with 'name' under trained_networks or configured model
     if name is not None:
-    
         path = os.path.join(AmfConfig.get_appdir(), 'trained_networks', name)
-
     else:
-
         path = AmfConfig.get('model')
 
     if path is not None and os.path.isfile(path):
-    
         AmfLog.text(f'Model: {path}')
-        model = keras.models.load_model(path)
-
+        model = keras.models.load_model(path, compile=False)
         if model.name == CNN1_NAME:
-
             AmfConfig.set('level', 1)
-
         else:
-
             AmfConfig.set('level', 2)
-            
         AmfLog.text(f'Classes: {AmfConfig.get_class_documentation()}.')
         return model
-
     else:
-
         if AmfConfig.get('run_mode') == 'train':
-
             AmfLog.text('Initializes a new network.')
-
-            if AmfConfig.get('level') == 1:
-
+            if (level or AmfConfig.get('level')) == 1:
                 return create_cnn1()
-
             else:
-
                 return create_cnn2()
-        
         else: # missing pre-trained model in prediction mode.
-        
             AmfLog.error('A pre-trained model is required in prediction mode',
                          exit_code=AmfLog.ERR_NO_PRETRAINED_MODEL)
 

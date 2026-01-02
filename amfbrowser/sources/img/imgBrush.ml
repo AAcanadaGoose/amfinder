@@ -74,7 +74,7 @@ class coords (source : ImgSource.cls) x_origin y_origin = object(self)
         let _, area = AmfSurface.rectangle ~rgba:_BGCOLOR_ ~w ~h
         and x = float x_origin -. xmul *. (float _EDGE_)
         and y = float y_origin -. ymul *. (float _EDGE_) in
-        Cairo.set_source_surface context area x y;
+        Cairo.set_source_surface context area ~x ~y;
         Cairo.paint context
 
     method private initialize_font () =
@@ -122,7 +122,7 @@ class coords (source : ImgSource.cls) x_origin y_origin = object(self)
         in
         let surface = f ~bgcolor:"#FFFFFFFF" ?fgcolor (_EDGE_ / 4) in
         let context = AmfUI.Drawing.cairo () in
-        Cairo.set_source_surface context surface x y;
+        Cairo.set_source_surface context surface ~x ~y;
         Cairo.paint context  
 
     method private draw_row_arrows r x y width height =
@@ -162,7 +162,7 @@ object(self)
         let x = self#center_horiz surface 
         and y = float (y_max + 10)
         and context = AmfUI.Drawing.cairo () in       
-        Cairo.set_source_surface context surface x y;
+        Cairo.set_source_surface context surface ~x ~y;
         Cairo.paint context
 
     method classes () =
@@ -170,7 +170,7 @@ object(self)
         let x = self#center_horiz surface 
         and y = float (y_max + 10)
         and context = AmfUI.Drawing.cairo () in
-        Cairo.set_source_surface context surface x y;
+        Cairo.set_source_surface context surface ~x ~y;
         Cairo.paint context
 
     method index_of_prob x = truncate (25.0 *. x) |> max 0 |> min 24
@@ -191,8 +191,8 @@ object(self)
         (* Paint the rectangle on the drawing area. *)
         let context = AmfUI.Drawing.cairo () in
         Cairo.set_source_surface context surface
-            (float x_origin +. float (_WMAT_ - w) /. 2.0)
-            legend_pos_y;
+            ~x:(float x_origin +. float (_WMAT_ - w) /. 2.0)
+            ~y:legend_pos_y;
         Cairo.paint context
 
     method show_probability pr =
@@ -204,7 +204,7 @@ object(self)
         (* Draw a vertical arrowhead below the color associated with pr. *)
         let surface = AmfSurface.Arrowhead.top ~bgcolor:_BGCOLOR_ 12 in    
         let context = AmfUI.Drawing.cairo () in
-        Cairo.set_source_surface context surface x legend_pos_y;
+        Cairo.set_source_surface context surface ~x ~y:legend_pos_y;
         Cairo.paint context;
         (* Write the probability value below the arrowhead. *)
         Cairo.select_font_face context "Monospace";
@@ -299,17 +299,22 @@ object (self)
     method pixbuf ?(sync = false) ~r ~c pixbuf =
         assert GdkPixbuf.(get_width pixbuf = _EDGE_);
         assert (GdkPixbuf.get_height pixbuf = _EDGE_);
-        let pixmap = AmfUI.Drawing.pixmap () in
-        pixmap#put_pixbuf
-            ~x:(self#x ~c)
-            ~y:(self#y ~r) pixbuf;
+        (* Save pixbuf to a temp PNG and paint via Cairo image surface *)
+        let tmp = Filename.temp_file "amf-ptile" ".png" in
+        GdkPixbuf.save ~filename:tmp ~typ:"png" ~options:[] pixbuf;
+        let surface = Cairo.PNG.create tmp in
+        (try Sys.remove tmp with _ -> ());
+        let context = AmfUI.Drawing.cairo () in
+        Cairo.set_source_surface context surface
+            ~x:(float (self#x ~c)) ~y:(float (self#y ~r));
+        Cairo.paint context;
         if sync then AmfUI.Drawing.synchronize ()
 
     method surface ?(sync = false) ~r ~c surface =
         let context = AmfUI.Drawing.cairo () in
         Cairo.set_source_surface context surface
-            (float (self#x ~c))
-            (float (self#y ~r));
+            ~x:(float (self#x ~c))
+            ~y:(float (self#y ~r));
         Cairo.paint context;
         if sync then self#sync "brush#surface" ()
 
@@ -400,4 +405,4 @@ end
 
 
 
-let create x = new brush x 
+let create x = new brush x

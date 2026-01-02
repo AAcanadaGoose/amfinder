@@ -30,7 +30,6 @@ module type PARAMS = sig
     val parent : GWindow.window
     val packing : #GButton.tool_item_o -> unit
     val border_width : int
-    val tooltips : GData.tooltips
 end
 
 module type S = sig
@@ -77,14 +76,11 @@ let draw_icon ?(digest = false) colors =
     Cairo.fill t;
     Cairo.stroke t;
   ) colors;
-  (* Draws the generated surface on a GtkPixmap. *)
-  let pixmap = GDraw.pixmap ~width:len ~height:h () in
-  let u = Cairo_gtk.create pixmap#pixmap in
-  Cairo.set_source_surface u surface 0.0 0.0;
-  Cairo.paint u;
-  (* Retrieves the drawings as pixbuf. *)
-  let pix = GdkPixbuf.create ~width:len ~height:h () in
-  pixmap#get_pixbuf pix;
+  (* Save surface to a temp PNG and load as pixbuf (GTK3-safe). *)
+  let tmp = Filename.temp_file "amf-pal" ".png" in
+  Cairo.PNG.write surface tmp;
+  let pix = GdkPixbuf.from_file tmp in
+  (try Sys.remove tmp with _ -> ());
   pix
 
 
@@ -260,8 +256,8 @@ module Make (P : PARAMS) : S = struct
 
     let set_tooltip s =
         let text = sprintf "Current palette: %s" s in
-        P.tooltips#set_tip ~text palette#coerce
- 
+        (palette#coerce)#misc#set_tooltip_text text
+
     let dialog = 
         let dlg = GWindow.dialog
             ~parent:P.parent

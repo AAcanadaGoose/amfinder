@@ -3,7 +3,7 @@
 </p>
 
 The Automatic Mycorrhiza Finder (AMFinder) allows for high-throughput computer
-vision-based identification and quantification of AM fungal colonisation
+vision-based identification and quantification of AM fungal colonization
 and intraradical hyphal structures using
 convolutional neural networks.
 
@@ -16,6 +16,8 @@ If you use AMFinder in your manuscript, please cite:
 ## Summary
 
 1. [Installation](#install)
+1. [Python API (programmatic use)](#python-api)
+1. [Command-line quick prompts](#cli-quick)
 1. [Batch processing (`amf`)](#amf)
 2. [Annotation browser (`amfbrowser`)](#amfbrowser)
 3. [A typical annotation pipeline](#pipeline)
@@ -26,6 +28,135 @@ If you use AMFinder in your manuscript, please cite:
 Detailed installation instructions for Linux, Mac and Windows can be found [here](INSTALL.md).
 If you are not familiar with Python virtual environments, you may want
 to read [this page](https://docs.python.org/3/tutorial/venv.html) first.
+
+### Quick virtual environment setup
+```bash
+# Create venv (Python 3.11 recommended)
+python3.11 -m venv .venv311
+
+# Activate
+# macOS/Linux (bash/zsh)
+source .venv311/bin/activate
+# Windows (PowerShell)
+# .\.venv311\Scripts\Activate.ps1
+# Windows (cmd)
+# .\.venv311\Scripts\activate
+
+# Verify you are using the venv interpreter
+which python   # macOS/Linux -> .../amfinder-master/.venv311/bin/python
+python -V      # should show Python 3.11.x
+
+# Install project requirements
+python -m pip install -U pip setuptools wheel
+python -m pip install -r amf/requirements.txt
+```
+Re-activate the venv in any new terminal with the same `source`/`Activate.ps1` command. Leave it with `deactivate`.
+
+
+## Python API (programmatic use)<a name="python-api"></a>
+
+AMFinder can be used as a Python library for in-memory prediction and training.
+See `dev-setup.md` for full environment setup (macOS & Linux).
+
+- Ensure dependencies are installed: `python -m pip install -r amf/requirements.txt`
+- Add the `amf/` folder to your Python path when running scripts (example below).
+
+Quick start (prediction, CNN1):
+```python
+import os, sys
+# Place this at the very top of your script (or notebook cell) before importing AMFinder.
+# It tells Python where to find the local `amf/` modules when you haven't installed a package.
+sys.path.insert(0, os.path.join(os.getcwd(), 'amf'))  # or: sys.path.insert(0, '/abs/path/to/amfinder-master/amf')
+from amfinder_api import AMFinder
+
+amf = AMFinder(tile_size=126, batch_size=32)
+amf.load_model('CNN1v2.h5', level=1)   # loads from amf/trained_networks/
+
+# Predict from file path
+preds_df = amf.predict('Sample_photos/clear1.JPG', level=1)
+print(preds_df.head())
+
+# Convert probabilities to one-hot annotations (CNN1)
+ann_df = amf.convert(preds_df, level=1)
+```
+
+Other prediction examples:
+```python
+import numpy as np
+from PIL import Image
+
+# From numpy array (H,W,3)
+img = np.array(Image.open('Sample_photos/clear1.JPG').convert('RGB'))
+amf.load_model('CNN2v2.h5', level=2)
+preds2 = amf.predict(img, level=2)  # CNN2 returns columns: A,V,H,I
+
+# Extract tiles and predict on tiles (CNN1)
+tiles, nrows, ncols = amf.extract_tiles('Sample_photos/clear1.JPG')
+probs = amf.predict_tiles(tiles, level=1)  # shape (N, 3)
+```
+
+Training with arrays:
+```python
+import numpy as np
+from amfinder_api import AMFinder
+
+# X: (N, 126, 126, 3), y: one-hot (N, 3) for CNN1 or (N, 4) for CNN2
+X = np.load('tiles.npy')
+y = np.load('labels.npy')
+
+amf = AMFinder(tile_size=126)
+model, history = amf.train(X=X, y=y, level=1, epochs=50, validation_split=0.15)
+
+# Save trained model
+amf.save_model(model, 'my_cnn1_model.h5')
+```
+
+Training from files (images + annotations):
+```python
+from amfinder_api import AMFinder
+
+images = ['img1.jpg', 'img2.jpg']
+annotations = ['img1.zip', 'img2.zip']  # archives created by amf/convert or amfbrowser
+
+amf = AMFinder()
+model, history = amf.train(images=images, annotations=annotations, level=2, epochs=50)
+```
+
+Data formats returned by API:
+- Predictions (CNN1): DataFrame with columns `row,col,Y,N,X`
+- Predictions (CNN2): DataFrame with columns `row,col,A,V,H,I`
+- `predict_tiles(...)`: numpy array of probabilities (N, 3) or (N, 4)
+- `extract_tiles(...)`: returns `(tiles: np.ndarray, nrows: int, ncols: int)`
+
+Models:
+- Supply bundled model names like `'CNN1v2.h5'`, `'CNN2v2.h5'` (located in `amf/trained_networks/`), or pass an absolute path to your own `.h5`.
+
+
+## Command-line quick prompts<a name="cli-quick"></a>
+
+Activate your environment and run the following:
+
+```bash
+# Predict colonization (CNN1)
+python amf/amf predict --network CNN1v2.h5 Sample_photos/clear1.JPG
+
+# Convert predictions to annotations (CNN1 default)
+python amf/amf convert Sample_photos/clear1.JPG
+
+# Predict intraradical structures (CNN2)
+python amf/amf predict --network CNN2v2.h5 Sample_photos/clear1.JPG
+
+# Convert predictions to annotations (CNN2) with custom threshold
+python amf/amf convert --CNN2 --threshold 0.6 Sample_photos/clear1.JPG
+
+# Train CNN1 from image files (uses associated ZIP annotations)
+python amf/amf train -1 -e 50 path/to/img1.jpg path/to/img2.jpg
+
+# Train CNN2 with a pre-trained starting point (fine-tune)
+python amf/amf train -2 -net CNN2v2.h5 -e 50 path/to/img*.jpg
+```
+
+> Detailed CLI parameters are documented below in the Batch processing (`amf`) section.
 
 
 ## Batch processing (`amf`)<a name="amf"></a>
@@ -38,7 +169,7 @@ $ source amfenv/bin/activate
 (amfenv) $ amf <action> <parameters> <images> 
 ```
 where `<action>` is either:
-- `predict`: prediction of fungal colonisation (CNN1) and intraradical hyphal structures (CNN2), 
+- `predict`: prediction of fungal colonization (CNN1) and intraradical hyphal structures (CNN2), 
 - `convert`: automatic conversion of predictions to annotations, or
 - `train`: neural network training.
 
@@ -49,7 +180,7 @@ Details about `<parameters>` are given in the following sections.
 
 ### Prediction mode<a name="amfpred"></a>
 
-This mode is used to predict fungal colonisation (CNN1) and intraradical hyphal structures (CNN2).
+This mode is used to predict fungal colonization (CNN1) and intraradical hyphal structures (CNN2).
 
 |Short|Long|Description|Default value|
 |-|-|-|-|
@@ -96,7 +227,7 @@ This mode is used to train AMFinder neural networks on different images. All par
 |`-p N`|`--patience N`|Wait for `N` epochs before early stopping.|N = 12|
 |`-lr X`|`--learning_rate X`|Use `X` as learning rate for the Adam optimiser.|X = 0.001|
 |`-vf N`|`--validation_fraction N`|Use `N` percents of total tiles as validation set.|N = 15%|
-|`-1`|`--CNN1`|Train for root colonisation.|True|
+|`-1`|`--CNN1`|Train for root colonization.|True|
 |`-2`|`--CNN2`|Train for intraradical hyphal structures.|False|
 
 
@@ -150,7 +281,7 @@ Below is a bash script describing a typical prediction/annotation pipeline:
 
 source amfenv/bin/activate
 
-# Predict fungal colonisation (CNN1) on a bunch of JPEG images.
+# Predict fungal colonization (CNN1) on a bunch of JPEG images.
 ./amf predict ink_stained_image{1-5}.jpg
 
 # Convert CNN1 predictions to annotations.

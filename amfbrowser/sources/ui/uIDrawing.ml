@@ -23,7 +23,7 @@
  *)
 
 type drawing_tools = {
-  pixmap : GDraw.pixmap;
+  surface : Cairo.Surface.t;
   cairo : Cairo.context;
 }
 
@@ -34,10 +34,10 @@ end
 module type S = sig
   val area : GMisc.drawing_area
   val cairo : unit -> Cairo.context
-  val pixmap : unit -> GDraw.pixmap
   val width : unit -> int
   val height : unit -> int
   val synchronize : unit -> unit
+  val snapshot : unit -> GdkPixbuf.pixbuf
 end
 
 module Make (P : PARAMS) : S = struct
@@ -49,34 +49,39 @@ module Make (P : PARAMS) : S = struct
 
   let get f () = match !dt with None -> assert false | Some dt -> f dt
   let cairo = get (fun dt -> dt.cairo)
-  let pixmap = get (fun dt -> dt.pixmap)
-  let width = get (fun dt -> fst dt.pixmap#size)
-  let height = get (fun dt -> snd dt.pixmap#size)
+  let width = get (fun dt -> Cairo.Image.get_width dt.surface)
+  let height = get (fun dt -> Cairo.Image.get_height dt.surface)
 
   let synchronize () =
-    let rect = Gdk.Rectangle.create
-      ~x:0 ~y:0
-      ~width:(width ())
-      ~height:(height ())
-    in area#misc#draw (Some rect)
+    area#misc#queue_draw ()
 
   let _ =
     (* Repaint masked area upon GtkDrawingArea exposure. *)
-    let repaint ev =
-      let open Gdk.Rectangle in
-      let r = GdkEvent.Expose.area ev in
-      let x = x r and y = y r and width = width r and height = height r in
-      let drawing = new GDraw.drawable area#misc#window in
-      drawing#put_pixmap
-        ~x ~y ~xsrc:x ~ysrc:y
-        ~width ~height (pixmap ())#pixmap;
-      false in
-    area#event#add [`EXPOSURE; `POINTER_MOTION; `BUTTON_PRESS; `LEAVE_NOTIFY];
-    area#event#connect#expose repaint;
-    (* Creates a GtkPixmap and its Cairo.context upon widget size allocation. *)
-    let initialize {Gtk.width; height} =  
-      let pixmap = GDraw.pixmap ~width ~height () in
-      let cairo = Cairo_gtk.create pixmap#pixmap in
-      dt := Some {pixmap; cairo}
-    in area#misc#connect#size_allocate initialize
+    let draw cr =
+      match !dt with
+      | None -> false
+      | Some { surface; _ } ->
+        Cairo.set_source_surface cr surface ~x:0.0 ~y:0.0;
+        Cairo.paint cr;
+        false
+    in
+    (* GTK3 draw signal provides cairo context via misc#connect *)
+    area#misc#connect#draw ~callback:draw |> ignore;
+    (* Create image surface and cairo context on size allocate. *)
+    let initialize {Gtk.width; height} =
+      let surface = Cairo.Image.(create ARGB32 ~w:width ~h:height) in
+      let cairo = Cairo.create surface in
+      dt := Some { surface; cairo }
+    in
+    area#misc#connect#size_allocate ~callback:initialize |> ignore
+
+  let snapshot () =
+    match !dt with
+    | None -> GdkPixbuf.create ~width:0 ~height:0 ()
+    | Some { surface; _ } ->
+      let tmp = Filename.temp_file "amf-snap" ".png" in
+      Cairo.PNG.write surface tmp;
+      let pix = GdkPixbuf.from_file tmp in
+      (try Sys.remove tmp with _ -> ());
+      pix
 end

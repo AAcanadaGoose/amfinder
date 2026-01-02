@@ -27,9 +27,6 @@
 val window : GWindow.window
 (** Application main window. *)
 
-val status_icon : GMisc.status_icon
-(** Status icon to be displayed on the system tray. *)
-
 module Levels : UILevels.S
 (** Annotation types. *)
 

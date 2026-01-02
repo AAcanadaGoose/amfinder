@@ -29,16 +29,15 @@ import datetime
 import matplotlib.pyplot as plt
 
 from tensorflow.keras.optimizers import Adam
-from keras.layers import Input, Dense, BatchNormalization, Add
-from keras.layers import PReLU, LeakyReLU
-from keras.layers.convolutional import UpSampling2D, Conv2D
-from keras.models import Model
+from tensorflow.keras.layers import Input, Dense, BatchNormalization, Add
+from tensorflow.keras.layers import PReLU, LeakyReLU
+from tensorflow.keras.layers import UpSampling2D, Conv2D
+from tensorflow.keras.models import Model
 # From keras 2.5, the following will be replaced by:
-from tf_agents.networks import network
 # Thanks to matevzl533 for reporting this. 
 # Reference: https://www.tensorflow.org/agents/tutorials/8_networks_tutorial
 #from keras.engine.network import Network
-from keras import backend as K
+from tensorflow.keras import backend as K
 
 import amfinder_model as AmfModel
 import amfinder_config as AmfConfig
@@ -298,7 +297,8 @@ def train(paths, batch_size=2, sample_interval=20):
     # For the combined model we will only train the generator
     # Using Network removes warnings.
     # https://github.com/keras-team/keras/issues/8585#issuecomment-412728017
-    frozen_discriminator = Network(discriminator.inputs,
+    # Replace deprecated Network wrapper with a non-trainable Model
+    frozen_discriminator = Model(discriminator.inputs,
                                    discriminator.outputs,
                                    name='frozen_discriminator')
 
@@ -475,4 +475,4 @@ def save_sample_images(epoch, generator, tiles, batch_size=2):
     fig.savefig('tmp/sr-output/SR_output_{}.png'.format(epoch + 1))
     plt.close()
 
-    
+
