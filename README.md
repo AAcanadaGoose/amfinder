@@ -3,7 +3,7 @@
 </p>
 
 The Automatic Mycorrhiza Finder (AMFinder) allows for high-throughput computer
-vision-based identification and quantification of AM fungal colonisation
+vision-based identification and quantification of AM fungal colonization
 and intraradical hyphal structures using
 convolutional neural networks.
 
@@ -137,7 +137,7 @@ Models:
 Activate your environment and run the following:
 
 ```bash
-# Predict colonisation (CNN1)
+# Predict colonization (CNN1)
 python amf/amf predict --network CNN1v2.h5 Sample_photos/clear1.JPG
 
 # Convert predictions to annotations (CNN1 default)
@@ -169,7 +169,7 @@ $ source amfenv/bin/activate
 (amfenv) $ amf <action> <parameters> <images> 
 ```
 where `<action>` is either:
-- `predict`: prediction of fungal colonisation (CNN1) and intraradical hyphal structures (CNN2), 
+- `predict`: prediction of fungal colonization (CNN1) and intraradical hyphal structures (CNN2), 
 - `convert`: automatic conversion of predictions to annotations, or
 - `train`: neural network training.
 
@@ -180,7 +180,7 @@ Details about `<parameters>` are given in the following sections.
 
 ### Prediction mode<a name="amfpred"></a>
 
-This mode is used to predict fungal colonisation (CNN1) and intraradical hyphal structures (CNN2).
+This mode is used to predict fungal colonization (CNN1) and intraradical hyphal structures (CNN2).
 
 |Short|Long|Description|Default value|
 |-|-|-|-|
@@ -227,7 +227,7 @@ This mode is used to train AMFinder neural networks on different images. All par
 |`-p N`|`--patience N`|Wait for `N` epochs before early stopping.|N = 12|
 |`-lr X`|`--learning_rate X`|Use `X` as learning rate for the Adam optimiser.|X = 0.001|
 |`-vf N`|`--validation_fraction N`|Use `N` percents of total tiles as validation set.|N = 15%|
-|`-1`|`--CNN1`|Train for root colonisation.|True|
+|`-1`|`--CNN1`|Train for root colonization.|True|
 |`-2`|`--CNN2`|Train for intraradical hyphal structures.|False|
 
 
@@ -281,7 +281,7 @@ Below is a bash script describing a typical prediction/annotation pipeline:
 
 source amfenv/bin/activate
 
-# Predict fungal colonisation (CNN1) on a bunch of JPEG images.
+# Predict fungal colonization (CNN1) on a bunch of JPEG images.
 ./amf predict ink_stained_image{1-5}.jpg
 
 # Convert CNN1 predictions to annotations.
